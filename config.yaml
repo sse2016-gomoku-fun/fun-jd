@@ -1,7 +1,12 @@
 base:
-  api_url: http://22.22.22.22
+  api:
+    url: http://22.22.22.22
+    credential:
+      username: foo
+      password: bar
   sandbox: ../windows-container/Debug/winc.exe
   compile:
+    timeout: 20000
     workingDirectory: ../runtime/compile/{user.userName}
     source: '{_id}-{taskToken}.c'
     target: '{_id}-{taskToken}.exe'

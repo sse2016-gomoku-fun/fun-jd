@@ -17,10 +17,27 @@ export default async (mq, logger) => {
     if (submission === null) {
       return;
     }
+    
     const workingDirectory = path.resolve(format(DI.config.compile.workingDirectory, task));
     const source = format(DI.config.compile.source, task);
     const target = format(DI.config.compile.target, task);
+    const sandbox = path.resolve(DI.config.sandbox);
+    const sandboxArgs = DI.config.compile.sandbox;
+    const compileCmd = format(DI.config.compile.command, { ...task, source, target });
+
     await fsp.writeFile(path.join(workingDirectory, source), submission.code);
+    
+    try {
+      const execResult = await exec(`${sandbox} ${sandboxArgs} ${compileCmd}`, {
+        cwd: workingDirectory,
+        timeout: DI.config.compile.timeout,
+        maxBuffer: 1 * 1024 * 1024,
+      });
+      console.log(execResult);
+    catch (err) {
+      // compile failed
+      console.log(err.stdout, err.stderr);
+    }
   }
 
   const subscription = await mq.subscribe('compile');
