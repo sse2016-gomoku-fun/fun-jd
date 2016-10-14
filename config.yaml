@@ -1,0 +1,26 @@
+base:
+  api_url: http://22.22.22.22
+  sandbox: ../windows-container/Debug/winc.exe
+  compile:
+    workingDirectory: ../runtime/compile/{user.userName}
+    source: '{_id}-{taskToken}.c'
+    target: '{_id}-{taskToken}.exe'
+    command: gcc -O2 -s -Wall -std=c11 -o {target} {source} -lm -Wl,--stack=134217728
+    sandbox: --use-logon
+  mq:
+    vhosts:
+      /:
+        connection:
+          hostname: 22.22.22.22
+          user: guest
+          password: guest
+        queues:
+          - gomoku_compile
+          - gomoku_judge
+        subscriptions:
+          compile:
+            prefetch: 1
+            queue: gomoku_compile
+          judge:
+            prefetch: 1
+            queue: gomoku_judge
