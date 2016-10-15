@@ -41,14 +41,20 @@ api.compileBegin = (task) => {
   });
 };
 
-api.compileEnd = (task, text, success, fileStream) => {
+api.compileEnd = (task, text, success, lzmaBuffer) => {
   const body = {
     ...task,
     text,
     success: String(success),
   };
-  if (success && fileStream) {
-    body.binary = fileStream;
+  if (success && lzmaBuffer) {
+    body.binary = {
+      value: lzmaBuffer,
+      options: {
+        filename: task.id,
+        contentType: 'application/x-xz',
+      },
+    };
   }
   return requestAsync('/submission/api/compileEnd', {
     method: 'POST',

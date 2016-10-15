@@ -3,8 +3,14 @@ import _ from 'lodash';
 import format from 'string-format';
 import path from 'path';
 import fsp from 'fs-promise';
+import lzma from 'lzma-native';
 import { exec } from 'child-process-promise';
 import api from 'libs/api';
+
+const LZMA_COMPRESS_OPTIONS = {
+  preset: 4,
+  threads: 0,
+};
 
 export default async (mq, logger) => {
 
@@ -51,7 +57,7 @@ export default async (mq, logger) => {
       if (text.length > LIMIT_SIZE_TEXT) {
         text = text.substr(0, LIMIT_SIZE_TEXT) + '...';
       }
-      let binaryStream = null;
+      let binaryBuffer = null;
       if (success) {
         const fp = path.join(workingDirectory, target);
         const stat = await fsp.stat(fp);
@@ -59,10 +65,10 @@ export default async (mq, logger) => {
           text = 'Compile succeeded but binary limit exceeded';
           success = false;
         } else {
-          binaryStream = fsp.createReadStream(fp);
+          binaryBuffer = await lzma.compress(await fsp.readFile(fp), LZMA_COMPRESS_OPTIONS);
         }
       }
-      await api.compileEnd(task, text, success, binaryStream);
+      await api.compileEnd(task, text, success, binaryBuffer);
     } catch (err) {
       await api.compileError(task, `System internal error occured when compiling this submission.\n\n${err.stack}`);
       throw err;
