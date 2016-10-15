@@ -15,7 +15,7 @@ base:
   mq:
     defaults:
       subscriptions:
-        prefetch: 2
+        prefetch: 1
     vhosts:
       /:
         connection:
