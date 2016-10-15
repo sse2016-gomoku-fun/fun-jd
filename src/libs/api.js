@@ -34,14 +34,14 @@ api.getLimits = () => {
   return requestAsync('/submission/api/limits', { method: 'GET' });
 };
 
-api.startCompile = (task) => {
-  return requestAsync('/submission/api/startCompile', {
+api.compileBegin = (task) => {
+  return requestAsync('/submission/api/compileBegin', {
     method: 'POST',
     body: task,
   });
 };
 
-api.completeCompile = (task, text, success, fileStream) => {
+api.compileEnd = (task, text, success, fileStream) => {
   const body = {
     ...task,
     text,
@@ -50,9 +50,16 @@ api.completeCompile = (task, text, success, fileStream) => {
   if (success && fileStream) {
     body.binary = fileStream;
   }
-  return requestAsync('/submission/api/completeCompile', {
+  return requestAsync('/submission/api/compileEnd', {
     method: 'POST',
     formData: body,
+  });
+};
+
+api.compileError = (task, text) => {
+  return requestAsync('/submission/api/compileError', {
+    method: 'POST',
+    body: { ...task, text },
   });
 };
 

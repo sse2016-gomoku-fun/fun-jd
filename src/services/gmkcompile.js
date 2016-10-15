@@ -18,7 +18,7 @@ export default async (mq, logger) => {
   logger.info('Received limits from API server', LIMITS);
 
   async function handleCompileTask(task) {
-    const submission = await api.startCompile(task);
+    const submission = await api.compileBegin(task);
 
     try {
       const workingDirectory = path.resolve(format(DI.config.compile.workingDirectory, submission));
@@ -62,9 +62,9 @@ export default async (mq, logger) => {
           binaryStream = fsp.createReadStream(fp);
         }
       }
-      await api.completeCompile(task, text, success, binaryStream);
+      await api.compileEnd(task, text, success, binaryStream);
     } catch (err) {
-      await api.completeCompile(task, `System error.\n${err.stack}`, false);
+      await api.compileError(task, `System internal error occured when compiling this submission.\n\n${err.stack}`);
       throw err;
     }
   }
@@ -73,7 +73,7 @@ export default async (mq, logger) => {
     if (err) throw err;
     subscription.on('error', err => logger.error(err));
     subscription.on('message', async (message, task, ackOrNack) => {
-      logger.info('Received compile task', task);
+      logger.info('Compile', task);
       try {
         await handleCompileTask(task);
       } catch (e) {
