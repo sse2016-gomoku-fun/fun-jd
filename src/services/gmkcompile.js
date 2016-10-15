@@ -1,10 +1,10 @@
 import { argv } from 'yargs';
+import _ from 'lodash';
 import format from 'string-format';
 import path from 'path';
 import fsp from 'fs-promise';
 import { exec } from 'child-process-promise';
 import api from 'libs/api';
-import compile from 'libs/compile';
 
 export default async (mq, logger) => {
 
@@ -12,44 +12,75 @@ export default async (mq, logger) => {
     return;
   }
 
-  async function handleCompileTask(task) {
-    const submission = await api.getAndMarkTaskSubmission(task);
-    if (submission === null) {
-      return;
-    }
-    
-    const workingDirectory = path.resolve(format(DI.config.compile.workingDirectory, task));
-    const source = format(DI.config.compile.source, task);
-    const target = format(DI.config.compile.target, task);
-    const sandbox = path.resolve(DI.config.sandbox);
-    const sandboxArgs = DI.config.compile.sandbox;
-    const compileCmd = format(DI.config.compile.command, { ...task, source, target });
+  const LIMITS = await api.getLimits();
+  const { LIMIT_SIZE_TEXT, LIMIT_SIZE_EXECUTABLE } = LIMITS;
 
-    await fsp.writeFile(path.join(workingDirectory, source), submission.code);
-    
+  logger.info('Received limits from API server', LIMITS);
+
+  async function handleCompileTask(task) {
+    const submission = await api.startCompile(task);
+
     try {
-      const execResult = await exec(`${sandbox} ${sandboxArgs} ${compileCmd}`, {
-        cwd: workingDirectory,
-        timeout: DI.config.compile.timeout,
-        maxBuffer: 1 * 1024 * 1024,
-      });
-      console.log(execResult);
-    catch (err) {
-      // compile failed
-      console.log(err.stdout, err.stderr);
+      const workingDirectory = path.resolve(format(DI.config.compile.workingDirectory, submission));
+      const source = format(DI.config.compile.source, submission);
+      const target = format(DI.config.compile.target, submission);
+      const sandbox = DI.config.sandbox === null ? null : path.resolve(DI.config.sandbox);
+      const sandboxArgs = DI.config.sandbox === null ? null : DI.config.compile.sandbox;
+      const compileCmd = format(DI.config.compile.command, { ...submission, source, target });
+
+      await fsp.ensureDir(workingDirectory);
+      await fsp.writeFile(path.join(workingDirectory, source), submission.code);
+
+      let success, stdout, stderr;
+
+      try {
+        const execResult = await exec(_.filter([sandbox, sandboxArgs, compileCmd]).join(' '), {
+          cwd: workingDirectory,
+          timeout: DI.config.compile.timeout,
+          maxBuffer: 1 * 1024 * 1024,
+        });
+        stdout = execResult.stdout;
+        stderr = execResult.stderr;
+        success = true;
+      } catch (err) {
+        stdout = err.stdout;
+        stderr = err.stderr;
+        success = false;
+      }
+      let text = (stdout + '\n' + stderr).trim();
+      if (text.length > LIMIT_SIZE_TEXT) {
+        text = text.substr(0, LIMIT_SIZE_TEXT) + '...';
+      }
+      let binaryStream = null;
+      if (success) {
+        const fp = path.join(workingDirectory, target);
+        const stat = await fsp.stat(fp);
+        if (stat.size > LIMIT_SIZE_EXECUTABLE) {
+          text = 'Compile succeeded but binary limit exceeded';
+          success = false;
+        } else {
+          binaryStream = fsp.createReadStream(fp);
+        }
+      }
+      await api.completeCompile(task, text, success, binaryStream);
+    } catch (err) {
+      await api.completeCompile(task, `System error.\n${err.stack}`, false);
+      throw err;
     }
   }
 
-  const subscription = await mq.subscribe('compile');
-  subscription.on('message', async (task, content, ackOrNack) => {
-    logger.info('Received compile task: %j', task);
-    try {
-      handleCompileTask(task);
-    } catch (e) {
-      logger.error(e);
-    }
-    // ack the task anyway
-    ackOrNack();
+  mq.subscribe('compile', (err, subscription) => {
+    if (err) throw err;
+    subscription.on('error', err => logger.error(err));
+    subscription.on('message', async (message, task, ackOrNack) => {
+      logger.info('Received compile task', task);
+      try {
+        await handleCompileTask(task);
+      } catch (e) {
+        logger.error(e);
+      }
+      ackOrNack();
+    });
   });
 
   logger.info('Accepting compiler tasks...');

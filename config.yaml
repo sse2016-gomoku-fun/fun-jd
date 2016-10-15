@@ -8,11 +8,14 @@ base:
   compile:
     timeout: 20000
     workingDirectory: ../runtime/compile/{user.userName}
-    source: '{_id}-{taskToken}.c'
-    target: '{_id}-{taskToken}.exe'
+    source: '{_id}.c'
+    target: '{_id}.exe'
     command: gcc -O2 -s -Wall -std=c11 -o {target} {source} -lm -Wl,--stack=134217728
     sandbox: --use-logon
   mq:
+    defaults:
+      subscriptions:
+        prefetch: 2
     vhosts:
       /:
         connection:
@@ -24,8 +27,6 @@ base:
           - gomoku_judge
         subscriptions:
           compile:
-            prefetch: 1
             queue: gomoku_compile
           judge:
-            prefetch: 1
             queue: gomoku_judge
